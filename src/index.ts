@@ -5,7 +5,11 @@ interface McpToolDefinition {
     type: 'object';
     properties: Record<string, unknown>;
     required?: string[];
+    anyOf?: Array<{ required: string[] }>;
+    oneOf?: Array<{ required: string[] }>;
+    allOf?: Array<{ required: string[] }>;
   };
+  outputSchema?: Record<string, unknown>;
 }
 
 interface McpToolExport {
@@ -135,6 +139,32 @@ const tools: McpToolExport['tools'] = [
     },
     outputSchema: listOutputSchema(),
   },
+  {
+    name: 'form_d_amendment_chains',
+    description: 'Group one issuer’s recent Form D notices into original-plus-amendment chains using each filing’s previous accession number. This prevents amendments from being mistaken for separate raises; incomplete SEC recent history can leave a chain without its original.',
+    inputSchema: { type: 'object', properties: {
+      cik: { type: 'string' }, limit: { type: 'number', description: 'Filings to inspect (1-20, default 20).' },
+    }, required: ['cik'] },
+    outputSchema: { type: 'object', properties: {
+      cik: { type: 'string' }, issuer_name: { type: 'string' }, returned_chains: { type: 'number' },
+      chains: { type: 'array', items: { type: 'object' } }, interpretation: { type: 'string' },
+    }, required: ['cik', 'returned_chains', 'chains', 'interpretation'] },
+  },
+  {
+    name: 'form_d_latest_offering_states',
+    description: 'Return only the latest filing state from each amendment-aware Form D chain for an issuer. This is a normalized regulatory snapshot, not proof that the amount sold closed or that separate chains are economically distinct rounds.',
+    inputSchema: { type: 'object', properties: { cik: { type: 'string' }, limit: { type: 'number' } }, required: ['cik'] },
+    outputSchema: listOutputSchema('offerings'),
+  },
+  {
+    name: 'form_d_related_person_network',
+    description: 'Summarize filer-reported related persons across one issuer’s recent Form D history, with filing and chain counts. Related persons are executives, directors, promoters, or similar roles—not disclosed investors.',
+    inputSchema: { type: 'object', properties: { cik: { type: 'string' }, limit: { type: 'number' } }, required: ['cik'] },
+    outputSchema: { type: 'object', properties: {
+      cik: { type: 'string' }, people: { type: 'array', items: { type: 'object' } },
+      interpretation: { type: 'string' },
+    }, required: ['cik', 'people', 'interpretation'] },
+  },
 ];
 
 interface EftsHit {
@@ -171,9 +201,87 @@ async function callTool(name: string, args: Record<string, unknown>): Promise<un
       return issuerHistory(args);
     case 'form_d_related_person_search':
       return relatedPersonSearch(args);
+    case 'form_d_amendment_chains':
+      return amendmentChains(args);
+    case 'form_d_latest_offering_states':
+      return latestOfferingStates(args);
+    case 'form_d_related_person_network':
+      return relatedPersonNetwork(args);
     default:
       throw new Error(`Unknown tool: ${name}`);
   }
+}
+
+async function amendmentChains(args: Record<string, unknown>) {
+  const history = await issuerHistory({ ...args, limit: intArg(args.limit, 20, 1, 20) }) as Record<string, any>;
+  const filings = history.filings as ParsedOffering[];
+  const byId = new Map(filings.map((f) => [f.accession_number, f]));
+  const rootOf = (filing: ParsedOffering) => {
+    let current = filing; const seen = new Set<string>();
+    while (typeof current.previous_accession_number === 'string' && !seen.has(current.accession_number)) {
+      seen.add(current.accession_number);
+      const previous = byId.get(normalizeAccession(current.previous_accession_number));
+      if (!previous) return normalizeAccession(current.previous_accession_number);
+      current = previous;
+    }
+    return current.accession_number;
+  };
+  const grouped = new Map<string, ParsedOffering[]>();
+  for (const filing of filings) {
+    const root = rootOf(filing);
+    grouped.set(root, [...(grouped.get(root) ?? []), filing]);
+  }
+  const chains = [...grouped.entries()].map(([root_accession_number, members]) => {
+    members.sort((a, b) => String(a.filing_date ?? '').localeCompare(String(b.filing_date ?? '')));
+    const latest = members.at(-1)!;
+    return {
+      root_accession_number,
+      original_present: byId.has(root_accession_number),
+      filing_count: members.length,
+      latest_accession_number: latest.accession_number,
+      latest_filing: latest,
+      filings: members,
+    };
+  }).sort((a, b) => String(b.latest_filing.filing_date ?? '').localeCompare(String(a.latest_filing.filing_date ?? '')));
+  return {
+    cik: history.cik, issuer_name: history.issuer_name, returned_chains: chains.length, chains,
+    interpretation: 'Filings are linked only through filer-supplied previous accession numbers within the bounded SEC history returned. Each chain is one notice plus amendments and should not be summed. Separate chains are notices, not verified closed rounds.',
+  };
+}
+
+async function latestOfferingStates(args: Record<string, unknown>) {
+  const result = await amendmentChains(args) as Record<string, any>;
+  const offerings = result.chains.map((chain: Record<string, any>) => chain.latest_filing);
+  return {
+    cik: result.cik, issuer_name: result.issuer_name, returned: offerings.length, offerings,
+    interpretation: result.interpretation,
+  };
+}
+
+async function relatedPersonNetwork(args: Record<string, unknown>) {
+  const result = await amendmentChains(args) as Record<string, any>;
+  const people = new Map<string, { name: string; relationships: Set<string>; filings: Set<string>; chains: Set<string> }>();
+  for (const chain of result.chains as Array<Record<string, any>>) {
+    for (const filing of chain.filings as ParsedOffering[]) {
+      for (const person of filing.related_persons) {
+        const name = String(person.name ?? '').trim();
+        if (!name) continue;
+        const key = name.toLowerCase();
+        const entry = people.get(key) ?? { name, relationships: new Set(), filings: new Set(), chains: new Set() };
+        for (const role of (person.relationships as string[] ?? [])) entry.relationships.add(role);
+        entry.filings.add(filing.accession_number); entry.chains.add(chain.root_accession_number);
+        people.set(key, entry);
+      }
+    }
+  }
+  return {
+    cik: result.cik,
+    people: [...people.values()].map((p) => ({
+      name: p.name, relationships: [...p.relationships], filing_count: p.filings.size,
+      offering_chain_count: p.chains.size, accession_numbers: [...p.filings],
+    })).sort((a, b) => b.offering_chain_count - a.offering_chain_count || b.filing_count - a.filing_count),
+    interpretation: 'These are filer-reported related persons and roles, not investors or proof of employment. Amendment repetitions are collapsed into offering-chain counts.',
+  };
 }
 
 async function recentRaises(args: Record<string, unknown>) {
