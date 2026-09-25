@@ -150,3 +150,4 @@ jobs:
         run: |
           echo "published ${{ steps.check.outputs.name }}@${{ steps.check.outputs.version }}"
           echo "verify: npm view ${{ steps.check.outputs.name }} dist.attestations"
+
