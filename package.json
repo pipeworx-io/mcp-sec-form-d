@@ -1,20 +1,32 @@
 {
   "name": "@pipeworx/mcp-sec-form-d",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "SEC Form D fundraising intelligence.",
   "type": "module",
   "main": "src/index.ts",
   "types": "src/index.ts",
+  "bin": {
+    "mcp-sec-form-d": "bin/cli.js"
+  },
   "keywords": ["mcp", "mcp-server", "model-context-protocol", "pipeworx", "sec-form-d"],
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/pipeworx-io/mcp-sec-form-d"
+    "url": "git+https://github.com/pipeworx-io/mcp-sec-form-d.git"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "tsx": "^4.19.0"
+  },
   "devDependencies": {
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3",
+    "@cloudflare/workers-types": "^4.20260405.1"
+  },
+  "pipeworx": {
+    "sourceHash": "v1-083910ac29c8892a2071d15524c237e714f7446a127bd58ff25f105897c362cd",
+    "sourceCommit": "00c836ddeaecbdd581dcfb0fb1842efea104006e"
   }
 }

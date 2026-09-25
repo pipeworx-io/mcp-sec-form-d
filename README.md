@@ -2,13 +2,13 @@
 
 SEC Form D fundraising intelligence.
 
-Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 1476+ live data sources.
+Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 1679+ live data sources.
 
 ## Tools
 
 | Tool | Description |
 |------|-------------|
-| `form_d_recent_raises` | Recent SEC Form D exempt-offering notices, newest first, hydrated from official filing XML with offering amount, amount sold, investors, security types, industry, issuer and related persons. A Form D is a self-reported offering notice—not proof that a financing round closed. Amendments are labeled and must not be double-counted. |
+| `form_d_recent_raises` | Recent SEC Form D exempt-offering notices, newest first, hydrated from official filing XML with offering amount, amount sold, investors, security types, industry, issuer and related persons. SAMPLE, NOT A CENSUS: this inspects only the newest few dozen notices counting back from `until`, no matter how wide a window you ask for — ask for a month and you get roughly its final day or two. `total_search_matches` is the SIZE OF THE WINDOW, not the number examined; `scanned` is the number examined and `scanned_window` is the date range those actually cover. To cover a period densely, step through it in short windows rather than widening `since`. A Form D is a self-reported offering notice—not proof that a financing round closed. Amendments are labeled and must not be double-counted. |
 | `form_d_search_issuers` | Search live SEC Form D filings by issuer, executive, fund, or other filing text and return normalized offering notices. Useful for private-company financing diligence and VC market scans. Results are notices, not independently verified closed rounds. |
 | `form_d_offering_detail` | Retrieve and normalize one official Form D XML filing by SEC accession number. Returns offering amounts, first sale, investors, exemptions, securities, issuer identity, executives/related persons, commissions, and exact SEC provenance. |
 | `form_d_issuer_history` | List one private issuer’s Form D filing and amendment history from SEC submissions data, with each notice hydrated from official XML. Do not sum amendments: later notices may restate the same offering rather than represent new capital. |
@@ -61,9 +61,45 @@ directly, instead of just this one's:
 }
 ```
 
-Both URLs reach the same gateway and the same 1476+ data sources. The
+Both URLs reach the same gateway and the same 1679+ data sources. The
 only difference is which pack's tools are listed **directly**; `ask_pipeworx`
 reaches all of them from either one.
+
+## No MCP client? Call it over HTTP
+
+```bash
+curl -X POST https://gateway.pipeworx.io/v1/tools/form_d_recent_raises \
+  -H 'Content-Type: application/json' \
+  -d '{"since":"2026-07-01","minimum_sold":1000000,"limit":8}'
+```
+
+No account needed for the first calls. Inspect any tool: `GET https://gateway.pipeworx.io/v1/tools/form_d_recent_raises`. Find one: `POST https://gateway.pipeworx.io/v1/tools/search_packs` with `{"query":"..."}`.
+
+## Standalone (no gateway account)
+
+This package also runs as a local stdio MCP server — no Pipeworx account, no
+gateway round-trip:
+
+```json
+{
+  "mcpServers": {
+    "sec-form-d": {
+      "command": "npx",
+      "args": ["-y", "@pipeworx/mcp-sec-form-d"]
+    }
+  }
+}
+```
+
+Or run it directly to confirm it starts:
+
+```bash
+npx -y @pipeworx/mcp-sec-form-d
+```
+
+It speaks MCP over stdin/stdout and answers `initialize`/`tools/list`/`tools/call`
+for **only** this pack's tools — none of the shared meta-tools the gateway
+connection above adds. Same source, same tools, no ask_pipeworx routing.
 
 ## Using with ask_pipeworx
 
@@ -84,13 +120,3 @@ The gateway picks the right tool and fills the arguments automatically.
 ## License
 
 MIT
-
-## No MCP client? Call it over HTTP
-
-```bash
-curl -X POST https://gateway.pipeworx.io/v1/tools/form_d_recent_raises \
-  -H 'Content-Type: application/json' \
-  -d '{"since":"2026-07-01","minimum_sold":1000000,"limit":8}'
-```
-
-No account needed for the first calls. Inspect any tool: `GET https://gateway.pipeworx.io/v1/tools/form_d_recent_raises`. Find one: `POST https://gateway.pipeworx.io/v1/tools/search_packs` with `{"query":"..."}`.
