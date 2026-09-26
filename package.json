@@ -1,6 +1,6 @@
 {
   "name": "@pipeworx/mcp-sec-form-d",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "description": "SEC Form D fundraising intelligence.",
   "type": "module",
   "main": "src/index.ts",
@@ -26,7 +26,7 @@
     "@cloudflare/workers-types": "^4.20260405.1"
   },
   "pipeworx": {
-    "sourceHash": "v1-083910ac29c8892a2071d15524c237e714f7446a127bd58ff25f105897c362cd",
-    "sourceCommit": "00c836ddeaecbdd581dcfb0fb1842efea104006e"
+    "sourceHash": "v1-82647052727e9f0b33c6ea51361480d21e4a8828cd5d96b996fa6400401acabd",
+    "sourceCommit": "6fe8fb3e01138dfc4ebe7d5c246503aab9278d06"
   }
 }
