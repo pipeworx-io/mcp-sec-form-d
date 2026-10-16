@@ -768,7 +768,14 @@ const tools: McpToolExport['tools'] = [
   {
     name: 'form_d_search_issuers',
     description:
-      'Search live SEC Form D filings by issuer, executive, fund, or other filing text and return normalized offering notices. Useful for private-company financing diligence and VC market scans. Results are notices, not independently verified closed rounds.',
+      // fleet #3169: in the words of a named-issuer question. The old line
+      // ("Search live SEC Form D filings by issuer, executive, fund, or other
+      // filing text") was absent from the production menu for every benchmark
+      // named-issuer question, which went to the SAMPLED form_d_recent_raises.
+      'Look up a named company\'s or fund\'s SEC Form D filing by the issuer\'s name — what it reported: total offering amount, amount sold, number of investors already invested' +
+      ', date of first sale, the federal exemption claimed (Rule 506(b), 506(c), Investment Company Act 3(c)(1)/3(c)(7)), securities offered and related persons. Pass the name, ' +
+      'e.g. "YCA26, L.P." or "Chickadee Biomedicines"; SEC EDGAR full-text search covers every Form D on file (default the last 5 years), so the issuer\'s filing is found wherev' +
+      'er it sits. Also finds filings naming an executive or fund. A Form D is a self-reported offering notice, not an independently verified closed round.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -984,7 +991,24 @@ async function relatedPersonNetwork(args: Record<string, unknown>) {
   };
 }
 
+/**
+ * Arguments that name ONE issuer (fleet #3169). form_d_recent_raises samples
+ * the newest few dozen notices in a window, so it cannot answer "what did
+ * <issuer> report": the issuer is found only if its filing happens to be among
+ * the newest. When a caller hands it an issuer, say which tool can — in the
+ * "use X instead" phrasing named-tool-retry.ts follows — rather than a generic
+ * unknown-argument error or, worse, a sample that silently omits the issuer.
+ */
+const ISSUER_ARGS = ['query', 'issuer', 'issuer_name', 'company', 'company_name', 'name', 'cik', 'fund', 'search'] as const;
+
 async function recentRaises(args: Record<string, unknown>) {
+  const issuerArg = ISSUER_ARGS.find((k) => typeof args[k] === 'string' && String(args[k]).trim() !== '');
+  if (issuerArg) {
+    throw new Error(
+      `form_d_recent_raises samples the newest notices across all issuers and cannot look up one issuer ("${String(args[issuerArg]).slice(0, 80)}"); `
+      + `use form_d_search_issuers instead (pass the issuer name as query), or form_d_issuer_history with a CIK.`,
+    );
+  }
   checkArgs(args, RECENT_RAISES_ARGS);
   const until = dateArg(args.until, today());
   // `days` is a relative window measured back from `until`. An explicit `since`
@@ -1076,14 +1100,65 @@ function compactFilters(filters: Record<string, unknown>): Record<string, unknow
     value != null && !(key === 'include_amendments' && value === true)));
 }
 
+/**
+ * Issuer-name match grade for a named-issuer search (fleet #3169). SEC
+ * full-text search orders by its own relevance, so for "Founders Fund Growth
+ * IV" the feeder "CCI Founders Fund Growth IV, L.P." can come back alongside —
+ * or ahead of — "Founders Fund Growth IV, LP", and a model takes the first row.
+ * Names are compared after dropping punctuation and entity suffixes
+ * (L.P./LP/LLC/Inc./Ltd./Corp.), so "YCA26, L.P." matches "YCA26".
+ *   exact    — the issuer IS the name asked for
+ *   contains — the asked-for name appears inside a longer issuer name
+ *              (feeders, parallel and "CCI …" vehicles)
+ *   other    — matched on filing text only (a related person, a fund manager)
+ */
+const ENTITY_SUFFIX = /\b(l\s*p|llc|l\s*l\s*c|inc|incorporated|ltd|limited|corp|corporation|co|company|plc|lllp|llp)\b/g;
+export function issuerNameKey(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(ENTITY_SUFFIX, ' ').replace(/\s+/g, ' ').trim();
+}
+export function issuerNameMatch(query: string, issuerName: string | null): 'exact' | 'contains' | 'other' {
+  const q = issuerNameKey(query);
+  const n = issuerNameKey(issuerName ?? '');
+  if (!q || !n) return 'other';
+  if (q === n) return 'exact';
+  return ` ${n} `.includes(` ${q} `) ? 'contains' : 'other';
+}
+const MATCH_ORDER = { exact: 0, contains: 1, other: 2 } as const;
+
 async function searchIssuers(args: Record<string, unknown>) {
   const query = requiredString(args, 'query');
   const until = dateArg(args.until, today());
   const since = dateArg(args.since, yearsAgo(5));
   const limit = intArg(args.limit, 5, 1, 10);
-  const search = await searchFormD(query, since, until, limit);
-  const offerings = (await hydrateHits(search.hits)).slice(0, limit);
-  return { query, window: { since, until }, total_search_matches: search.total, returned: offerings.length, offerings };
+  // Read a few more hits than asked for, so an exact issuer SEC ranked below
+  // its near-name feeders is still among the rows we order (bounded: one SEC
+  // fetch per hit, on a shared egress IP).
+  const search = await searchFormD(query, since, until, Math.min(10, limit * 2));
+  const unhydrated: Unhydrated[] = [];
+  const offerings = (await hydrateHits(search.hits, unhydrated))
+    .map((row, i) => ({ row: { ...row, name_match: issuerNameMatch(query, row.issuer_name) }, i }))
+    // Exact issuer first, then names containing it, then text-only hits; SEC's
+    // own order is kept within each grade (stable sort on the original index).
+    .sort((a, b) => MATCH_ORDER[a.row.name_match] - MATCH_ORDER[b.row.name_match] || a.i - b.i)
+    .map(({ row }) => row)
+    .slice(0, limit);
+  // SEC matched filings we could not read: that is a failure to report, not an
+  // empty result. Before fleet #3169 YCA26 came back {total_search_matches:1,
+  // returned:0, offerings:[]} and was answered as "no match".
+  if (offerings.length === 0 && unhydrated.length > 0) {
+    throw new Error(`SEC full-text search matched ${search.total} Form D filing(s) for "${query}" but none could be read: ${unhydrated.map((u) => `${u.accession_number}: ${u.error}`).join('; ').slice(0, 400)}`);
+  }
+  return {
+    query, window: { since, until },
+    // Contrast with form_d_recent_raises' `coverage: sample`: this searches
+    // EVERY Form D in the window for the query, so a named issuer that is not
+    // here was not filed in the window (or is spelled differently).
+    coverage: 'full_search',
+    coverage_note: `SEC full-text search over every Form D filed ${since}..${until}; total_search_matches is the true number of matching filings (SEC caps it at ${EFTS_TOTAL_CAP.toLocaleString('en-US')}).`,
+    total_search_matches: search.total, returned: offerings.length,
+    ...(unhydrated.length ? { unhydrated } : {}),
+    offerings,
+  };
 }
 
 async function relatedPersonSearch(args: Record<string, unknown>) {
@@ -1115,7 +1190,7 @@ async function issuerHistory(args: Record<string, unknown>) {
     }))
     .filter((row) => row.form === 'D' || row.form === 'D/A')
     .slice(0, limit);
-  const filings = await Promise.all(accessions.map((row) => offeringDetail(row.accession, row.filing_date)));
+  const filings = await Promise.all(accessions.map((row) => offeringDetail(row.accession, row.filing_date, cik)));
   return {
     cik,
     issuer_name: submission.name ?? null,
@@ -1144,23 +1219,118 @@ async function searchFormD(query: string, since: string, until: string, requeste
   };
 }
 
-async function hydrateHits(hits: EftsHit[]): Promise<ParsedOffering[]> {
+/**
+ * Form D Item 6 codes -> the exemption's name (fleet #3169). The XML carries
+ * the code ("06b"); a caller asks which exemption was claimed and expects
+ * "Rule 506(b)". Codes are SEC's own (Form D, Item 6 / EDGAR Form D XML
+ * technical specification). An unknown code passes through as itself.
+ */
+const FORM_D_EXEMPTIONS: Record<string, string> = {
+  '04': 'Rule 504(b)(1)',
+  '04.1': 'Rule 504(b)(1)(i)',
+  '04.2': 'Rule 504(b)(1)(ii)',
+  '04.3': 'Rule 504(b)(1)(iii)',
+  '06': 'Rule 506',
+  '06b': 'Rule 506(b)',
+  '06c': 'Rule 506(c)',
+  '4a5': 'Securities Act Section 4(a)(5)',
+  '3C': 'Investment Company Act Section 3(c)',
+  '3C.1': 'Investment Company Act Section 3(c)(1)',
+  '3C.7': 'Investment Company Act Section 3(c)(7)',
+};
+export function exemptionNames(codes: readonly string[]): string[] {
+  return codes.map((c) => FORM_D_EXEMPTIONS[c] ?? (/^3C\.(\d+)$/.test(c) ? `Investment Company Act Section 3(c)(${c.slice(3)})` : c));
+}
+
+/** Hits SEC matched whose filing could not be read (fleet #3169). Exposed so
+ *  a caller can say "found N, read M" instead of a silent shorter list. */
+type Unhydrated = { accession_number: string | null; error: string };
+
+async function hydrateHits(hits: EftsHit[], failures?: Unhydrated[]): Promise<ParsedOffering[]> {
   const settled = await Promise.allSettled(hits.map(async (hit) => {
     const source = hit._source ?? {};
     const accession = source.adsh;
     if (!accession) throw new Error('SEC search result omitted accession number');
-    return offeringDetail(accession, source.file_date ?? null);
+    return offeringDetail(accession, source.file_date ?? null, source.ciks?.[0] ?? null);
   }));
-  return settled
-    .filter((result): result is PromiseFulfilledResult<ParsedOffering> => result.status === 'fulfilled')
-    .map((result) => result.value);
+  const out: ParsedOffering[] = [];
+  settled.forEach((result, i) => {
+    if (result.status === 'fulfilled') out.push(result.value);
+    else failures?.push({
+      accession_number: hits[i]?._source?.adsh ?? null,
+      error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+    });
+  });
+  return out;
 }
 
-async function offeringDetail(accessionInput: string, filingDate: string | null = null): Promise<ParsedOffering> {
+/**
+ * The archive folders a Form D's primary_doc.xml can live under, most likely
+ * first (fleet #3169). The accession prefix is the CIK of whoever SUBMITTED
+ * the filing, which is the issuer only when the issuer files for itself. A
+ * notice filed through an agent — YCA26, L.P. (issuer CIK 2131752) filed via
+ * 0001315863-26-000364 — lives under the ISSUER's CIK: SEC answers 404 under
+ * 1315863 and 200 under 2131752 (verified 2026-10-16). Using the prefix alone
+ * made every agent-filed notice unreadable, and the search tools dropped them
+ * silently.
+ */
+export function formDArchiveCiks(accession: string, issuerCik?: string | null): string[] {
+  const out: string[] = [];
+  for (const c of [issuerCik, accession.slice(0, 10)]) {
+    if (!c) continue;
+    const digits = c.replace(/\D/g, '');
+    if (!digits || digits.length > 10) continue;
+    const n = String(Number(digits));
+    if (n !== '0' && !out.includes(n)) out.push(n);
+  }
+  return out;
+}
+
+/** The issuer's CIK for an accession, from EDGAR full-text search — for a
+ *  caller that has only the accession number. null when SEC does not say. */
+async function issuerCikForAccession(accession: string): Promise<string | null> {
+  const params = new URLSearchParams({ q: `"${accession}"` });
+  const data = await secJson(`${EFTS}?${params}`) as { hits?: { hits?: EftsHit[] } };
+  const hit = (data.hits?.hits ?? []).find((h) => normalizeAccessionOrNull(h._source?.adsh) === accession);
+  return hit?._source?.ciks?.[0] ?? null;
+}
+
+function normalizeAccessionOrNull(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  try { return normalizeAccession(value); } catch { return null; }
+}
+
+async function offeringDetail(accessionInput: string, filingDate: string | null = null, issuerCik: string | null = null): Promise<ParsedOffering> {
   const accession = normalizeAccession(accessionInput);
-  const cik = accession.slice(0, 10);
-  const filingUrl = `${SEC_ARCHIVES}/${Number(cik)}/${accession.replaceAll('-', '')}/primary_doc.xml`;
-  const xml = await secText(filingUrl);
+  const folder = accession.replaceAll('-', '');
+  let candidates = formDArchiveCiks(accession, issuerCik);
+  let xml: string | null = null;
+  let filingUrl = '';
+  for (let pass = 0; pass < 2 && xml === null; pass++) {
+    for (const c of candidates) {
+      filingUrl = `${SEC_ARCHIVES}/${c}/${folder}/primary_doc.xml`;
+      try {
+        xml = await secText(filingUrl);
+        break;
+      } catch (err) {
+        if (!(err instanceof Error) || !err.message.startsWith('Form D filing not found')) throw err;
+      }
+    }
+    // Only an accession in hand and the prefix 404'd: ask SEC whose filing it
+    // is, once, and try that CIK. Never more than one extra lookup.
+    if (xml === null && pass === 0 && !issuerCik) {
+      const resolved = await issuerCikForAccession(accession);
+      const next = formDArchiveCiks(accession, resolved).filter((c) => !candidates.includes(c));
+      if (next.length === 0) break;
+      candidates = next;
+    } else {
+      break;
+    }
+  }
+  if (xml === null) {
+    throw new Error(`Form D filing not found: accession ${accession} is not under ${candidates.map((c) => `CIK ${c}`).join(' or ')} in the SEC archive.`);
+  }
+  const cik = (tag(block(xml, 'primaryIssuer'), 'cik') ?? '').replace(/\D/g, '').padStart(10, '0');
   const relatedPersons = blocks(xml, 'relatedPersonInfo').map((block) => ({
     name: [
       tag(block, 'firstName'),
@@ -1182,7 +1352,8 @@ async function offeringDetail(accessionInput: string, filingDate: string | null 
   ].filter(([xmlTag]) => boolTag(xml, xmlTag)).map(([, label]) => label);
   return compact({
     accession_number: accession,
-    cik,
+    // The ISSUER's CIK from the filing itself, not the submitter's prefix.
+    cik: cik === '0000000000' ? accession.slice(0, 10) : cik,
     issuer_name: tag(xml, 'entityName'),
     filing_date: filingDate,
     submission_type: tag(xml, 'submissionType'),
@@ -1195,6 +1366,7 @@ async function offeringDetail(accessionInput: string, filingDate: string | null 
     investment_fund_type: tag(xml, 'investmentFundType'),
     revenue_range: tag(xml, 'revenueRange'),
     federal_exemptions: tags(block(xml, 'federalExemptionsExclusions'), 'item'),
+    federal_exemption_names: exemptionNames(tags(block(xml, 'federalExemptionsExclusions'), 'item')),
     date_of_first_sale: tag(block(xml, 'dateOfFirstSale'), 'value'),
     more_than_one_year: boolTag(xml, 'moreThanOneYear'),
     securities_offered: securities,
