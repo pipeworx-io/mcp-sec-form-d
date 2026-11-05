@@ -207,7 +207,7 @@
   },
   {
     "name": "form_d_offering_detail",
-    "description": "Retrieve and normalize one official Form D XML filing by SEC accession number. Returns offering amounts, first sale, investors, exemptions, securities, issuer identity, executives/related persons, commissions, and exact SEC provenance.",
+    "description": "Read one SEC Form D securities offering notice (or D/A amendment) by its ACCESSION NUMBER, e.g. \"0001603198-14-000001\", with or without the issuer CIK: offering amounts (total offered, amount sold, remaining), investors already invested, first sale, exemptions claimed (Rule 506(b)/506(c), Investment Company Act 3(c)(1)/3(c)(7)), securities offered, issuer identity, executives/related persons, commissions and finders' fees, and exact SEC provenance. Prefer this over the generic EDGAR filing readers whenever the accession is a Form D: it parses the structured notice rather than searching rendered text. Only have the issuer's name? Use form_d_search_issuers.",
     "inputSchema": {
       "type": "object",
       "properties": {

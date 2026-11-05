@@ -1,6 +1,6 @@
 {
   "name": "@pipeworx/mcp-sec-form-d",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "SEC Form D fundraising intelligence.",
   "type": "module",
   "main": "lib/index.js",
@@ -27,7 +27,7 @@
     "mode": "gateway",
     "slug": "sec-form-d",
     "gatewaySlug": "sec-form-d",
-    "sourceHash": "v1-51d8ca30670a3f2e20fda28c4a2d0e0029b186939871d265d4dfe123624f0ba1",
-    "sourceCommit": "98853f34516646cb7c4c1460f09249b262c0269e"
+    "sourceHash": "v1-2d2a448a98cd4da25d76c18f8db8b36cf147143bb6d5f445ed62d288843fa82c",
+    "sourceCommit": "8fc802aa5e23be625ce08d97178f5676c7bc93f3"
   }
 }
