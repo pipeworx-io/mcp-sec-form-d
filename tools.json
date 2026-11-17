@@ -1,13 +1,13 @@
 [
   {
     "name": "form_d_recent_raises",
-    "description": "Recent SEC Form D exempt-offering notices, newest first, hydrated from official filing XML with offering amount, amount sold, investors, security types, industry, issuer and related persons. SAMPLE, NOT A CENSUS: this inspects only the newest few dozen notices counting back from `until`, no matter how wide a window you ask for — ask for a month and you get roughly its final day or two. `total_search_matches` is the SIZE OF THE WINDOW, not the number examined; `scanned` is the number examined and `scanned_window` is the date range those actually cover. To cover a period densely, step through it in short windows rather than widening `since`. A Form D is a self-reported offering notice—not proof that a financing round closed. Amendments are labeled and must not be double-counted.",
+    "description": "Recent SEC Form D exempt-offering notices, newest first, hydrated from official filing XML with offering amount, amount sold, investors, security types, industry, issuer and related persons. SAMPLE, NOT A CENSUS: this inspects only the newest few dozen notices counting back from `until`, no matter how wide a window you ask for, ask for a month and you get roughly its final day or two. `total_search_matches` is the SIZE OF THE WINDOW, not the number examined; `scanned` is the number examined and `scanned_window` is the date range those actually cover. To cover a period densely, step through it in short windows rather than widening `since`. A Form D is a self-reported offering notice, not proof that a financing round closed. Amendments are labeled and must not be double-counted.",
     "inputSchema": {
       "type": "object",
       "properties": {
         "since": {
           "type": "string",
-          "description": "Start filing date YYYY-MM-DD. Default: 7 days before `until` (NOT 7 days before today — so an `until` in the past gives a sensible window instead of erroring)."
+          "description": "Start filing date YYYY-MM-DD. Default: 7 days before `until` (NOT 7 days before today, so an `until` in the past gives a sensible window instead of erroring)."
         },
         "until": {
           "type": "string",
@@ -66,7 +66,7 @@
         },
         "total_search_matches": {
           "type": "number",
-          "description": "Form D notices filed in `window`. NOT the number examined — that is `scanned`."
+          "description": "Form D notices filed in `window`. NOT the number examined, that is `scanned`."
         },
         "scanned": {
           "type": "number",
@@ -126,7 +126,7 @@
   },
   {
     "name": "form_d_search_issuers",
-    "description": "Look up a named company's or fund's SEC Form D filing by the issuer's name — what it reported: total offering amount, amount sold, number of investors already invested, date of first sale, the federal exemption claimed (Rule 506(b), 506(c), Investment Company Act 3(c)(1)/3(c)(7)), securities offered and related persons. Pass the name, e.g. \"YCA26, L.P.\" or \"Chickadee Biomedicines\"; SEC EDGAR full-text search covers every Form D on file (default the last 5 years), so the issuer's filing is found wherever it sits. Also finds filings naming an executive or fund. A Form D is a self-reported offering notice, not an independently verified closed round.",
+    "description": "Look up a named company's or fund's SEC Form D filing by the issuer's name, what it reported: total offering amount, amount sold, number of investors already invested, date of first sale, the federal exemption claimed (Rule 506(b), 506(c), Investment Company Act 3(c)(1)/3(c)(7)), securities offered and related persons. Pass the name, e.g. \"YCA26, L.P.\" or \"Chickadee Biomedicines\"; SEC EDGAR full-text search covers every Form D on file (default the last 5 years), so the issuer's filing is found wherever it sits. Also finds filings naming an executive or fund. A Form D is a self-reported offering notice, not an independently verified closed round.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -261,7 +261,7 @@
   },
   {
     "name": "form_d_issuer_history",
-    "description": "List one private issuer’s Form D filing and amendment history from SEC submissions data, with each notice hydrated from official XML. Do not sum amendments: later notices may restate the same offering rather than represent new capital.",
+    "description": "List one private issuer's Form D filing and amendment history from SEC submissions data, with each notice hydrated from official XML. Do not sum amendments: later notices may restate the same offering rather than represent new capital.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -415,7 +415,7 @@
   },
   {
     "name": "form_d_amendment_chains",
-    "description": "Group one issuer’s recent Form D notices into original-plus-amendment chains using each filing’s previous accession number. This prevents amendments from being mistaken for separate raises; incomplete SEC recent history can leave a chain without its original.",
+    "description": "Group one issuer's recent Form D notices into original-plus-amendment chains using each filing's previous accession number. This prevents amendments from being mistaken for separate raises; incomplete SEC recent history can leave a chain without its original.",
     "inputSchema": {
       "type": "object",
       "properties": {
@@ -534,7 +534,7 @@
   },
   {
     "name": "form_d_related_person_network",
-    "description": "Summarize filer-reported related persons across one issuer’s recent Form D history, with filing and chain counts. Related persons are executives, directors, promoters, or similar roles—not disclosed investors.",
+    "description": "Summarize filer-reported related persons across one issuer's recent Form D history, with filing and chain counts. Related persons are executives, directors, promoters, or similar roles, not disclosed investors.",
     "inputSchema": {
       "type": "object",
       "properties": {

@@ -2,20 +2,20 @@
 
 SEC Form D fundraising intelligence.
 
-Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 2007+ live data sources. This is an independent, unofficial integration — not affiliated with, endorsed by, or published by the upstream provider.
+Part of [Pipeworx](https://pipeworx.io) — an MCP gateway connecting AI agents to 2014+ live data sources. This is an independent, unofficial integration — not affiliated with, endorsed by, or published by the upstream provider.
 
 ## Tools
 
 | Tool | Description |
 |------|-------------|
-| `form_d_recent_raises` | Recent SEC Form D exempt-offering notices, newest first, hydrated from official filing XML with offering amount, amount sold, investors, security types, industry, issuer and related persons. SAMPLE, NOT A CENSUS: this inspects only the newest few dozen notices counting back from `until`, no matter how wide a window you ask for — ask for a month and you get roughly its final day or two. `total_search_matches` is the SIZE OF THE WINDOW, not the number examined; `scanned` is the number examined and `scanned_window` is the date range those actually cover. To cover a period densely, step through it in short windows rather than widening `since`. A Form D is a self-reported offering notice—not proof that a financing round closed. Amendments are labeled and must not be double-counted. |
-| `form_d_search_issuers` | Look up a named company's or fund's SEC Form D filing by the issuer's name — what it reported: total offering amount, amount sold, number of investors already invested, date of first sale, the federal exemption claimed (Rule 506(b), 506(c), Investment Company Act 3(c)(1)/3(c)(7)), securities offered and related persons. Pass the name, e.g. "YCA26, L.P." or "Chickadee Biomedicines"; SEC EDGAR full-text search covers every Form D on file (default the last 5 years), so the issuer's filing is found wherever it sits. Also finds filings naming an executive or fund. A Form D is a self-reported offering notice, not an independently verified closed round. |
+| `form_d_recent_raises` | Recent SEC Form D exempt-offering notices, newest first, hydrated from official filing XML with offering amount, amount sold, investors, security types, industry, issuer and related persons. SAMPLE, NOT A CENSUS: this inspects only the newest few dozen notices counting back from `until`, no matter how wide a window you ask for, ask for a month and you get roughly its final day or two. `total_search_matches` is the SIZE OF THE WINDOW, not the number examined; `scanned` is the number examined and `scanned_window` is the date range those actually cover. To cover a period densely, step through it in short windows rather than widening `since`. A Form D is a self-reported offering notice, not proof that a financing round closed. Amendments are labeled and must not be double-counted. |
+| `form_d_search_issuers` | Look up a named company's or fund's SEC Form D filing by the issuer's name, what it reported: total offering amount, amount sold, number of investors already invested, date of first sale, the federal exemption claimed (Rule 506(b), 506(c), Investment Company Act 3(c)(1)/3(c)(7)), securities offered and related persons. Pass the name, e.g. "YCA26, L.P." or "Chickadee Biomedicines"; SEC EDGAR full-text search covers every Form D on file (default the last 5 years), so the issuer's filing is found wherever it sits. Also finds filings naming an executive or fund. A Form D is a self-reported offering notice, not an independently verified closed round. |
 | `form_d_offering_detail` | Read one SEC Form D securities offering notice (or D/A amendment) by its ACCESSION NUMBER, e.g. "0001603198-14-000001", with or without the issuer CIK: offering amounts (total offered, amount sold, remaining), investors already invested, first sale, exemptions claimed (Rule 506(b)/506(c), Investment Company Act 3(c)(1)/3(c)(7)), securities offered, issuer identity, executives/related persons, commissions and finders' fees, and exact SEC provenance. Prefer this over the generic EDGAR filing readers whenever the accession is a Form D: it parses the structured notice rather than searching rendered text. Only have the issuer's name? Use form_d_search_issuers. |
-| `form_d_issuer_history` | List one private issuer’s Form D filing and amendment history from SEC submissions data, with each notice hydrated from official XML. Do not sum amendments: later notices may restate the same offering rather than represent new capital. |
+| `form_d_issuer_history` | List one private issuer's Form D filing and amendment history from SEC submissions data, with each notice hydrated from official XML. Do not sum amendments: later notices may restate the same offering rather than represent new capital. |
 | `form_d_related_person_search` | Find Form D notices mentioning an executive, promoter, director, or other related person, then return only filings whose parsed related-person list matches the name. Useful for mapping repeat founders and fund managers; relationships are filer-supplied. |
-| `form_d_amendment_chains` | Group one issuer’s recent Form D notices into original-plus-amendment chains using each filing’s previous accession number. This prevents amendments from being mistaken for separate raises; incomplete SEC recent history can leave a chain without its original. |
+| `form_d_amendment_chains` | Group one issuer's recent Form D notices into original-plus-amendment chains using each filing's previous accession number. This prevents amendments from being mistaken for separate raises; incomplete SEC recent history can leave a chain without its original. |
 | `form_d_latest_offering_states` | Return only the latest filing state from each amendment-aware Form D chain for an issuer. This is a normalized regulatory snapshot, not proof that the amount sold closed or that separate chains are economically distinct rounds. |
-| `form_d_related_person_network` | Summarize filer-reported related persons across one issuer’s recent Form D history, with filing and chain counts. Related persons are executives, directors, promoters, or similar roles—not disclosed investors. |
+| `form_d_related_person_network` | Summarize filer-reported related persons across one issuer's recent Form D history, with filing and chain counts. Related persons are executives, directors, promoters, or similar roles, not disclosed investors. |
 
 ## Quick Start
 
@@ -61,7 +61,7 @@ directly, instead of just this one's:
 }
 ```
 
-Both URLs reach the same gateway and the same 2007+ data sources. The
+Both URLs reach the same gateway and the same 2014+ data sources. The
 only difference is which pack's tools are listed **directly**; `ask_pipeworx`
 reaches all of them from either one.
 
