@@ -325,11 +325,34 @@ jobs:
             url=$(gh api repos/modelcontextprotocol/registry/releases/latest \
               --jq '[.assets[] | select(.name | test("^mcp-publisher_linux_amd64\\.tar\\.gz$")) | .browser_download_url][0] // empty')
             if [ -z "$url" ]; then
-              echo "::warning::could not resolve the mcp-publisher release asset -- MCP Registry listing not updated"
-              exit 0
+              # Fleet #4449: this used to be a warning + exit 0, the same
+              # silent-success shape as #3995: no listing, green run.
+              echo "::error::could not resolve the mcp-publisher release asset -- the MCP Registry listing was NOT created. Re-run this workflow's failed job to retry; the npm publish itself is done and will be skipped."
+              exit 1
             fi
             tgz="${RUNNER_TEMP:-/tmp}/mcp-publisher.tar.gz"
-            curl -sSL -o "$tgz" "$url"
+            # Fleet #4449: a bare `curl -sSL -o` exits 0 on an HTTP error page
+            # and on a short read, so the next line died with "gzip: stdin:
+            # not in gzip format" / exit 2 (mcp-veriphone run 43995463349,
+            # 2026-11-17: npm 0.2.2 published, listing never created, monitor
+            # check _registry_npm_listing red). --fail turns an error page
+            # into a failed curl, gzip -t catches a truncated or non-archive
+            # body, and the loop retries both before giving up loudly.
+            # No pipes here (see fleet #3790 above).
+            attempts="${PUBLISHER_DOWNLOAD_TRIES:-5}"
+            got=""
+            for attempt in $(seq 1 "$attempts"); do
+              if curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 120 -o "$tgz" "$url" && gzip -t "$tgz"; then
+                got=1
+                break
+              fi
+              echo "::warning::mcp-publisher download attempt $attempt of $attempts failed or was not a gzip archive ($url)"
+              if [ "$attempt" -lt "$attempts" ]; then sleep "${PUBLISHER_DOWNLOAD_PAUSE:-5}"; fi
+            done
+            if [ -z "$got" ]; then
+              echo "::error::could not download a valid mcp-publisher archive after $attempts attempts -- the MCP Registry listing was NOT created. Re-run this workflow's failed job to retry; the npm publish itself is done and will be skipped."
+              exit 1
+            fi
             tar xzf "$tgz" mcp-publisher
             sudo mv mcp-publisher /usr/local/bin/mcp-publisher
           fi
